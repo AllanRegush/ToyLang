@@ -2,6 +2,28 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <assert.h>
+
+struct Token;
+
+
+// AST Expermentation
+class ASTNode {
+public:
+    virtual void accept() = 0;
+};
+
+class Binary : ASTNode {
+public:
+    Binary(std::unique_ptr<ASTNode> left, std::unique_ptr<Token> op, std::unique_ptr<ASTNode> right):
+        m_left(std::move(left)),
+        m_right(std::move(right)),
+        m_op(std::move(op)){}
+private:
+    std::unique_ptr<ASTNode> m_left;
+    std::unique_ptr<ASTNode> m_right;
+    std::unique_ptr<Token> m_op;
+};
 
 enum class TokenType {
     LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE,
@@ -63,10 +85,14 @@ private:
     {
         return m_src.at(m_current++);
     }
+    void add_token(const TokenType type, const std::string& text)
+    {
+        m_tokens.emplace_back(std::make_unique<Token>(type, m_line, std::move(text)));
+    }
     void add_token(const TokenType type)
     {
-        std::string text = m_src.substr(m_start, m_current);
-        m_tokens.emplace_back(std::make_unique<Token>(type, m_line, text));
+        const std::string text = m_src.substr(m_start, m_current);
+        m_tokens.emplace_back(std::make_unique<Token>(type, m_line, std::move(text)));
     }
     void scan_token()
     {
@@ -83,11 +109,27 @@ private:
         case ';': add_token(TokenType::SEMICOLON); break;
         case '*': add_token(TokenType::STAR); break;
         case '!': {
-            TokenType type = match('=') ? TokenType::BANG_EQUAL : TokenType::BANG;
+            const TokenType type = match('=') ? TokenType::BANG_EQUAL : TokenType::BANG;
             add_token(type);
         } break;
         case '/': {
-
+            if (match('/')) {
+                while(peek() != '\n' && !is_at_end())
+                    advance();
+            }
+            else if (match('*')) {
+                while(peek() != '*' && !match('/')) {
+                    if(peek() == '\n') m_line++;
+                    advance();
+                }
+                m_current += 2;
+            }
+            else {
+                add_token(TokenType::SLASH);
+            }
+        } break;
+        case '"': {
+            string();
         } break;
         default:
             std::cout << "error on line: " << m_line << " Unexpected char\n";
@@ -96,18 +138,31 @@ private:
     }
     bool match(char expect)
     {
-        if (is_at_end()) {
+        if (is_at_end())
             return false;
-        }
-        if (m_src.at(m_current) != expect) {
+
+        if (m_src.at(m_current) != expect)
             return false;
-        }
+
         m_current++;
         return true;
     }
+    char peek()
+    {
+        if (is_at_end())
+            return '\0';
+
+        return m_src.at(m_current);
+    }
+    void string()
+    {
+        // TODO (Allan): get string handling working.
+        std::cout << "Strings do not work yet!! \n";
+        assert(false);
+    }
 public:
     Lexer(const std::string src): m_src(src) {}
-    std::vector<std::unique_ptr<Token>> scanTokens()
+    std::vector<std::unique_ptr<Token>> scan_tokens()
     {
         while (!is_at_end()) {
             m_start = m_current;
@@ -121,11 +176,11 @@ public:
 static void run(const std::string& src)
 {
     Lexer lexer {src};
-    const auto tokens = lexer.scanTokens();
+    const auto tokens = lexer.scan_tokens();
 
-    for (const auto& token: tokens) {
+    for (const auto& token: tokens)
         std::cout << "Token Type: " << token->type << " Line: " << token->line << '\n';
-    }
+
 }
 
 static void run_repl()
@@ -134,9 +189,9 @@ static void run_repl()
         std::cout << "> ";
         std::string line;
         std::getline(std::cin, line);
-        if (line.length() == 0) {
+        if (line.length() == 0)
             break;
-        }
+
         run(line);
     }
 }
